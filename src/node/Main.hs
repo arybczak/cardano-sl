@@ -56,12 +56,13 @@ import           Pos.Update.Context         (ucUpdateSemaphore)
 import           Pos.Util                   (inAssertMode)
 import           Pos.Util.UserSecret        (usVss)
 import           Pos.Util.Util              (powerLift)
+#ifdef WITH_WALLET
 import           Pos.Wallet                 (WalletSscType)
+#endif
 import           Pos.WorkMode               (ProductionMode, RawRealMode, RawRealModeK,
-                                             StaticMode, StatsMode)
+                                             StaticMode, StatsMode, WorkMode)
 #ifdef WITH_WEB
 import           Pos.Web                    (serveWebGT)
-import           Pos.WorkMode               (WorkMode)
 #ifdef WITH_WALLET
 import           Pos.Wallet.Web             (WalletProductionMode, WalletStaticMode,
                                              WalletStatsMode, WalletWebHandler,
@@ -89,7 +90,11 @@ action peerHolder args@Args {..} transport = do
     currentParams <- getNodeParams args systemStart
     putText $ "Running using " <> show (CLI.sscAlgo commonArgs)
     putText $ "If stats is on: " <> show enableStats
-    putText $ "If wallet enabled: " <> show enableWallet
+#ifdef WITH_WALLET
+    putText $ "Is wallet enabled: " <> show enableWallet
+#else
+    putText "Wallet is disabled, because software is built w/o it"
+#endif
     putText $ "Static peers is on: " <> show staticPeers
 
     let vssSK = fromJust $ npUserSecret currentParams ^. usVss
@@ -128,7 +133,12 @@ action peerHolder args@Args {..} transport = do
                     (_, _, NistBeaconAlgo) ->
                         logError "Wallet does not support NIST beacon!"
 #endif
-    if not enableWallet then do
+#ifdef WITH_WALLET
+    let userWantsWallet = enableWallet
+#else
+    let userWantsWallet = False
+#endif
+    unless userWantsWallet $ do
         let sscParams :: Either (SscParams SscNistBeacon) (SscParams SscGodTossing)
             sscParams = bool (Left ()) (Right gtParams) (CLI.sscAlgo commonArgs == GodTossingAlgo)
 
@@ -166,20 +176,9 @@ action peerHolder args@Args {..} transport = do
                             (mconcat [wDhtWorkers kad, utwProd])
                             currentParams
                 either (runner @SscNistBeacon) (runner @SscGodTossing) sscParams
-    else
-        logError $ "You try to run wallet, but code wasn't compiled with wallet flag"
   where
+#ifdef WITH_WEB
     convPlugins = (,mempty) . map (\act -> ActionSpec $ \__vI __sA -> act)
-
-    transportR ::
-        forall ssc t0 t1 .
-        ( Each '[MonadTrans] [t0, t1]
-        , Each '[Monad] [ t1 (RawRealMode ssc)
-                        , t0 (t1 (RawRealMode ssc))
-                        ]
-        )
-        => Transport (t0 $ t1 (RawRealMode ssc))
-    transportR = hoistTransport (lift . lift) transport
 
     transportW ::
         forall ssc t0 t1 t2 t3 .
@@ -191,6 +190,17 @@ action peerHolder args@Args {..} transport = do
         )
         => Transport (t0 $ t1 $ t2 $ t3 (RawRealMode ssc))
     transportW = hoistTransport (lift . lift . lift . lift) transport
+#endif
+
+    transportR ::
+        forall ssc t0 t1 .
+        ( Each '[MonadTrans] [t0, t1]
+        , Each '[Monad] [ t1 (RawRealMode ssc)
+                        , t0 (t1 (RawRealMode ssc))
+                        ]
+        )
+        => Transport (t0 $ t1 (RawRealMode ssc))
+    transportR = hoistTransport (lift . lift) transport
 
 #ifdef WITH_WEB
 pluginsGT ::
@@ -236,6 +246,8 @@ updateTriggerWorker = first pure $ worker mempty $ \_ -> do
 -- Wallet stuff
 ----------------------------------------------------------------------------
 
+#ifdef WITH_WALLET
+
 walletProd
     :: SscConstraint WalletSscType
     => Args
@@ -278,6 +290,8 @@ walletServe Args {..} = first pure $ worker walletServerOuts $ \sendActions ->
         sendActions
         walletDebug
         walletPort
+
+#endif
 
 printFlags :: IO ()
 printFlags = do
