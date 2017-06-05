@@ -45,6 +45,8 @@ type WalletProductionMode = NoStatsT $ WalletWebHandler (RawRealModeK WalletSscT
 
 type WalletStatsMode = StatsT $ WalletWebHandler (RawRealModeK WalletSscType)
 
+type WrappedSpec m a = m (ActionSpec m a, OutSpecs)
+
 -- | WalletProductionMode runner.
 runWProductionMode
     :: SscConstraint WalletSscType
@@ -54,12 +56,11 @@ runWProductionMode
     -> KademliaDHTInstance
     -> NodeParams
     -> SscParams WalletSscType
-    -> (ActionSpec WalletProductionMode a, OutSpecs)
+    -> WrappedSpec WalletProductionMode a
     -> Production a
 runWProductionMode db conn =
     runRawKBasedMode
-        unwrapWPMode
-        (lift . lift . lift)
+        unwrapWPMode (lift . lift . lift)
   where
     unwrapWPMode = runWalletWebDB db . runWalletWS conn . getNoStatsT
 {-# NOINLINE runWProductionMode #-}
@@ -73,7 +74,7 @@ runWStatsMode
     -> KademliaDHTInstance
     -> NodeParams
     -> SscParams WalletSscType
-    -> (ActionSpec WalletStatsMode a, OutSpecs)
+    -> WrappedSpec WalletStatsMode a
     -> Production a
 runWStatsMode db conn transport kinst param sscp runAction = do
     statMap <- liftIO SM.newIO

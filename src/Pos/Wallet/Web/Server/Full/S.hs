@@ -47,10 +47,11 @@ runWStaticMode
     -> Set NodeId
     -> NodeParams
     -> SscParams WalletSscType
-    -> (ActionSpec WalletStaticMode a, OutSpecs)
+    -> WalletStaticMode (ActionSpec WalletStaticMode a, OutSpecs)
     -> Production a
 runWStaticMode db conn =
-    runRawSBasedMode (runWalletWebDB db . runWalletWS conn . getNoStatsT) (lift . lift . lift)
+    runRawSBasedMode
+        (runWalletWebDB db . runWalletWS conn . getNoStatsT) (lift . lift . lift)
 {-# NOINLINE runWStaticMode #-}
 
 walletServeWebFullS

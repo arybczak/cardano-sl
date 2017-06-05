@@ -36,7 +36,7 @@ import           Pos.Core.Constants                 (memPoolLimitRatio)
 import           Pos.DB                             (MonadDBRead,
                                                      MonadGState (gsAdoptedBVData))
 import           Pos.Lrc.Types                      (RichmenStake)
-import           Pos.Slotting                       (MonadSlots (getCurrentSlot))
+import           Pos.Slotting                       (MonadSlots, getCurrentSlot)
 import           Pos.Ssc.Class.LocalData            (LocalQuery, LocalUpdate,
                                                      SscLocalDataClass (..))
 import           Pos.Ssc.Extra                      (MonadSscMem, sscRunGlobalQuery,

@@ -71,7 +71,7 @@ runNode' plugins' = ActionSpec $ \vI sendActions -> do
     mapM_ (fork . unpackPlugin) plugins'
 
     -- Instead of sleeping forever, we wait until graceful shutdown
-    waitForWorkers (allWorkersCount @ssc @m)
+    waitForWorkers =<< (allWorkersCount @ssc @m)
     exitWith (ExitFailure 20)
   where
     -- FIXME shouldn't this kill the whole program?
@@ -88,11 +88,11 @@ runNode
     :: ( SscConstraint ssc, SecurityWorkersClass ssc
        , WorkMode ssc m )
     => ([WorkerSpec m], OutSpecs)
-    -> (WorkerSpec m, OutSpecs)
-runNode (plugins', plOuts) = (,plOuts <> wOuts) $ runNode' $ workers' ++ plugins''
-  where
-    (workers', wOuts) = allWorkers
-    plugins'' = map (wrapActionSpec "plugin") plugins'
+    -> m (WorkerSpec m, OutSpecs)
+runNode (plugins', plOuts) = do
+    (workers', wOuts) <- allWorkers
+    let plugins'' = map (wrapActionSpec "plugin") plugins'
+    return $ (,plOuts <> wOuts) $ runNode' $ workers' ++ plugins''
 
 initSemaphore :: (WorkMode ssc m) => m ()
 initSemaphore = do

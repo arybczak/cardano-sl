@@ -20,7 +20,7 @@ import           Pos.Context          (recoveryCommGuard)
 import           Pos.Delegation       (delegationRelays, dlgWorkers)
 import           Pos.Lrc.Worker       (lrcOnNewSlotWorker)
 import           Pos.Security.Workers (SecurityWorkersClass, securityWorkers)
-import           Pos.Slotting.Class   (MonadSlots (slottingWorkers))
+import           Pos.Slotting.Class   ()
 import           Pos.Slotting.Util    (logNewSlotWorker)
 import           Pos.Ssc.Class        (SscListenersClass (sscRelays),
                                        SscWorkersClass (sscWorkers))
@@ -37,30 +37,31 @@ allWorkers
        , SecurityWorkersClass ssc
        , WorkMode ssc m
        )
-    => ([WorkerSpec m], OutSpecs)
-allWorkers = mconcatPair
-    [
-      -- Only workers of "onNewSlot" type
+    => [m ()] -> ([WorkerSpec m], OutSpecs)
+allWorkers slottingWorkers =
+    mconcatPair
+        [
+        -- Only workers of "onNewSlot" type
 
-      -- TODO cannot have this DHT worker here. It assumes Kademlia.
-      --wrap' "dht"        $ dhtWorkers
+        -- TODO cannot have this DHT worker here. It assumes Kademlia.
+        --wrap' "dht"        $ dhtWorkers
 
-      wrap' "ssc"        $ sscWorkers
-    , wrap' "security"   $ untag securityWorkers
-    , wrap' "lrc"        $ first one lrcOnNewSlotWorker
-    , wrap' "us"         $ usWorkers
+          wrap' "ssc"        $ sscWorkers
+        , wrap' "security"   $ untag securityWorkers
+        , wrap' "lrc"        $ first one lrcOnNewSlotWorker
+        , wrap' "us"         $ usWorkers
 
-      -- Have custom loggers
-    , wrap' "block"      $ blkWorkers
-    , wrap' "txp"        $ txpWorkers
-    , wrap' "delegation" $ dlgWorkers
-    , wrap' "slotting"   $ (properSlottingWorkers, mempty)
-    , wrap' "relay"      $ relayWorkers $ mconcat
-        [delegationRelays, untag sscRelays, txRelays, usRelays]
+        -- Have custom loggers
+        , wrap' "block"      $ blkWorkers
+        , wrap' "txp"        $ txpWorkers
+        , wrap' "delegation" $ dlgWorkers
+        , wrap' "slotting"   $ (properSlottingWorkers, mempty)
+        , wrap' "relay"      $ relayWorkers $ mconcat
+            [delegationRelays, untag sscRelays, txRelays, usRelays]
 
-    -- I don't know, guys, I don't know :(
-    -- , const ([], mempty) statsWorkers
-    ]
+        -- I don't know, guys, I don't know :(
+        -- , const ([], mempty) statsWorkers
+        ]
   where
     properSlottingWorkers =
        fst (recoveryCommGuard (localWorker logNewSlotWorker)) :
@@ -75,5 +76,6 @@ allWorkersCount
        , SecurityWorkersClass ssc
        , WorkMode ssc m
        )
-    => Int
-allWorkersCount = length $ fst (allWorkers @ssc @m)
+    => [m ()] -> Int
+allWorkersCount slottingWorkers =
+    length . fst $ (allWorkers @ssc @m) slottingWorkers
