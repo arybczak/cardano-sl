@@ -46,8 +46,7 @@ import           Pos.DB.Class                   (MonadBlockDBGeneric (..), Monad
 import           Pos.DB.DB                      (GStateCoreRedirect)
 import           Pos.Delegation.Class           (DelegationVar)
 import           Pos.Discovery.Holders          (DiscoveryConstT, DiscoveryKademliaT)
-import           Pos.Slotting                   (MonadSlots, SlotsRedirect,
-                                                 SomeSlottingSettings)
+import           Pos.Slotting                   (MonadSlots, SlotsRedirect)
 import           Pos.Slotting.MemState          (MonadSlotsData, SlottingVar)
 import           Pos.Slotting.MemState.Holder   (SlotsDataRedirect)
 import           Pos.Ssc.Class.Helpers          (SscHelpersClass)

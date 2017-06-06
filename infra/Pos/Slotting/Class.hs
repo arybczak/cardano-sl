@@ -17,6 +17,8 @@ module Pos.Slotting.Class
        , runSlotsRedirect
 
        , SlottingContext (..)
+       , scSettingsL
+       , scWorkersL
        ) where
 
 import           Universum
@@ -177,7 +179,7 @@ data SlottingContext = SlottingContext
 
 makeLensesFor
     [ ("scSettings", "scSettingsL")
-    -- , ("scWorkers", "scWorkersL")
+    , ("scWorkers", "scWorkersL")
     ]
     ''SlottingContext
 

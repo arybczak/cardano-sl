@@ -1,5 +1,6 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE CPP                 #-}
+{-# LANGUAGE KindSignatures      #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 
@@ -90,10 +91,10 @@ import           Pos.Lrc.Context             (LrcContext (..), LrcSyncData (..))
 import qualified Pos.Lrc.DB                  as LrcDB
 import           Pos.Lrc.Fts                 (followTheSatoshiM)
 import           Pos.Security                (SecurityWorkersClass)
-import           Pos.Slotting                (SlottingContext, SlottingVar,
+import           Pos.Slotting                (SlottingContext (..), SlottingVar,
                                               SomeSlottingSettings (..), mkNtpSlottingVar,
-                                              ntpSlottingSettings, runSlotsDataRedirect,
-                                              runSlotsRedirect, simpleSlottingSettings)
+                                              ntpSlottingContext, runSlotsDataRedirect,
+                                              runSlotsRedirect, simpleSlottingContext)
 import           Pos.Ssc.Class               (SscConstraint, SscNodeContext, SscParams,
                                               sscCreateNodeContext)
 import           Pos.Ssc.Extra               (SscMemTag, bottomSscState, mkSscState)
@@ -130,8 +131,8 @@ import           Pos.WorkMode                (ProductionMode, RawRealMode (..),
 
 -- | RawRealMode runner.
 runRawRealMode
-    :: forall m ssc a.
-       (SscConstraint ssc, SecurityWorkersClass ssc)
+    :: forall (m :: * -> *) ssc a.
+       (SscConstraint ssc, SecurityWorkersClass ssc, WorkMode ssc m)
     => Transport (RawRealMode ssc)
     -> NodeParams
     -> SscParams ssc
@@ -147,7 +148,8 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
             case npUseNTP of
                 False -> pure simpleSlottingContext
                 True  -> ntpSlottingContext <$> mkNtpSlottingVar
-        let allWorkersNum = allWorkersCount @ssc @m
+        let slottingWorkers = scWorkers slottingContext
+        let allWorkersNum = allWorkersCount @ssc @m slottingWorkers
         let runCHHere =
               runCH @ssc allWorkersNum np initNC modernDBs slottingContext
         -- TODO [CSL-775] ideally initialization logic should be in scenario.
@@ -175,7 +177,6 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
                    flip Ether.runReadersT
                       ( Tagged @NodeDBs modernDBs
                       , Tagged @SlottingVar slottingVar
-                      , Tagged @SomeSlottingSettings slottingSettings
                       , Tagged @SscMemTag bottomSscState
                       , Tagged @TxpHolderTag txpVar
                       , Tagged @DelegationVar dlgVar
@@ -211,7 +212,6 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
            flip Ether.runReadersT
                ( Tagged @NodeDBs modernDBs
                , Tagged @SlottingVar slottingVar
-               , Tagged @SomeSlottingSettings slottingSettings
                ) .
            runSlotsDataRedirect .
            runSlotsRedirect .
@@ -221,7 +221,6 @@ runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec
            flip Ether.runReadersT
                ( Tagged @NodeDBs modernDBs
                , Tagged @SlottingVar slottingVar
-               , Tagged @SomeSlottingSettings slottingSettings
                , Tagged @SscMemTag sscState
                , Tagged @TxpHolderTag txpVar
                , Tagged @DelegationVar dlgVar
@@ -455,7 +454,7 @@ runCH allWorkersNum params@NodeParams {..} sscNodeContext db slottingCtx act = d
             , ncUpdateContext = UpdateContext {..}
             , ncNodeParams = params
             , ncSendLock = Nothing
-            , ncSlottingContext = slottingContext
+            , ncSlottingContext = slottingCtx
 #ifdef WITH_EXPLORER
             , ncTxpGlobalSettings = explorerTxpGlobalSettings
 #else

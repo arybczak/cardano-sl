@@ -57,7 +57,8 @@ import           Pos.Reporting.MemState        (ReportingContext (..), rcLogging
                                                 rcReportServers)
 import           Pos.Security.Params           (SecurityParams)
 import           Pos.Shutdown.Types            (ShutdownContext (..))
-import           Pos.Slotting                  (SlottingContext)
+import           Pos.Slotting                  (SlottingContext, SomeSlottingSettings,
+                                                scSettingsL)
 import           Pos.Ssc.Class.Types           (MonadSscContext, Ssc (SscNodeContext),
                                                 SscContextTag)
 import           Pos.Txp.Settings              (TxpGlobalSettings)
@@ -217,6 +218,7 @@ type instance TagsK (NodeContext ssc) =
   Type ':
   Type ':
   Type ':
+  Type ':
   '[]
 
 return []
@@ -238,6 +240,7 @@ type instance Tags (NodeContext ssc) =
   RelayContext           :::
   ShutdownContext        :::
   SlottingContext        :::
+  SomeSlottingSettings   :::
   TxpGlobalSettings      :::
   JLFile                 :::
   GenesisUtxo            :::
@@ -344,6 +347,9 @@ instance HasLens StartTime (NodeContext ssc) StartTime where
 
 instance HasLens SlottingContext (NodeContext ssc) SlottingContext where
     lensOf = ncSlottingContextL
+
+instance HasLens SomeSlottingSettings (NodeContext ssc) SomeSlottingSettings where
+    lensOf = ncSlottingContextL . scSettingsL
 
 instance HasLens TxpGlobalSettings (NodeContext ssc) TxpGlobalSettings where
     lensOf = ncTxpGlobalSettingsL
