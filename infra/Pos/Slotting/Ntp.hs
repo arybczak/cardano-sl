@@ -9,11 +9,13 @@ module Pos.Slotting.Ntp
        ( NtpSlottingVar
        , ntpSlottingSettings
        , ntpSlottingWorkers
+       , ntpSlottingContext
        , mkNtpSlottingVar
 
        -- * Simple slotting (TODO: move outside)
        , simpleSlottingSettings
        , simpleSlottingWorkers
+       , simpleSlottingContext
        ) where
 
 import           Universum
@@ -38,7 +40,9 @@ import           Pos.Core.Types              (EpochIndex, SlotId (..), Timestamp
                                               mkLocalSlotIndex)
 import           Pos.Util.Util               (leftToPanic)
 
-import           Pos.Slotting.Class          (SlottingConstraint, SlottingSettings (..))
+import           Pos.Slotting.Class          (SlottingConstraint, SlottingContext (..),
+                                              SlottingSettings (..),
+                                              SomeSlottingSettings (..))
 import qualified Pos.Slotting.Constants      as C
 import           Pos.Slotting.MemState.Class (MonadSlotsData (..))
 import           Pos.Slotting.Types          (EpochSlottingData (..), SlottingData (..))
@@ -76,6 +80,14 @@ ntpSlottingSettings var =
     , ssGetCurrentSlotBlocking = runReaderT ntpGetCurrentSlotBlocking var
     , ssGetCurrentSlotInaccurate = runReaderT ntpGetCurrentSlotInaccurate var
     , ssCurrentTimeSlotting = runReaderT ntpCurrentTime var
+    }
+
+-- | 'SlottingContext' for NTP.
+ntpSlottingContext :: NtpSlottingVar -> SlottingContext
+ntpSlottingContext var =
+    SlottingContext
+    { scSettings = SomeSlottingSettings (ntpSlottingSettings var)
+    , scWorkers = ntpSlottingWorkers var
     }
 
 ----------------------------------------------------------------------------
@@ -347,6 +359,14 @@ simpleSlottingSettings =
     , ssCurrentTimeSlotting = simpleCurrentTimeSlotting
     }
 
--- | Workers necessary for simple slotting.
+-- | Workers necessary for the simple slotting implementation.
 simpleSlottingWorkers :: [a]
 simpleSlottingWorkers = []
+
+-- | 'SlottingContext' for the simple slotting implementation.
+simpleSlottingContext :: SlottingContext
+simpleSlottingContext =
+    SlottingContext
+    { scSettings = SomeSlottingSettings simpleSlottingSettings
+    , scWorkers = simpleSlottingWorkers
+    }

@@ -1,3 +1,4 @@
+{-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE CPP                 #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -89,10 +90,10 @@ import           Pos.Lrc.Context             (LrcContext (..), LrcSyncData (..))
 import qualified Pos.Lrc.DB                  as LrcDB
 import           Pos.Lrc.Fts                 (followTheSatoshiM)
 import           Pos.Security                (SecurityWorkersClass)
-import           Pos.Slotting                (SlottingVar, SomeSlottingSettings (..),
-                                              mkNtpSlottingVar, ntpSlottingSettings,
-                                              runSlotsDataRedirect, runSlotsRedirect,
-                                              simpleSlottingSettings)
+import           Pos.Slotting                (SlottingContext, SlottingVar,
+                                              SomeSlottingSettings (..), mkNtpSlottingVar,
+                                              ntpSlottingSettings, runSlotsDataRedirect,
+                                              runSlotsRedirect, simpleSlottingSettings)
 import           Pos.Ssc.Class               (SscConstraint, SscNodeContext, SscParams,
                                               sscCreateNodeContext)
 import           Pos.Ssc.Extra               (SscMemTag, bottomSscState, mkSscState)
@@ -129,22 +130,28 @@ import           Pos.WorkMode                (ProductionMode, RawRealMode (..),
 
 -- | RawRealMode runner.
 runRawRealMode
-    :: forall ssc a.
+    :: forall m ssc a.
        (SscConstraint ssc, SecurityWorkersClass ssc)
-    => Int
-    -> Transport (RawRealMode ssc)
+    => Transport (RawRealMode ssc)
     -> NodeParams
     -> SscParams ssc
     -> MkListeners (RawRealMode ssc)
     -> OutSpecs
     -> ActionSpec (RawRealMode ssc) a
     -> Production a
-runRawRealMode allWorkersNum transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec action) =
+runRawRealMode transport np@NodeParams {..} sscnp listeners outSpecs (ActionSpec action) =
     usingLoggerName lpRunnerTag $ do
         initNC <- untag @ssc sscCreateNodeContext sscnp
         modernDBs <- openNodeDBs npRebuildDb npDbPathM
+        slottingContext <-
+            case npUseNTP of
+                False -> pure simpleSlottingContext
+                True  -> ntpSlottingContext <$> mkNtpSlottingVar
+        let allWorkersNum = allWorkersCount @ssc @m
+        let runCHHere =
+              runCH @ssc allWorkersNum np initNC modernDBs slottingContext
         -- TODO [CSL-775] ideally initialization logic should be in scenario.
-        runCH @ssc allWorkersNum np initNC modernDBs .
+        runCHHere .
             flip Ether.runReaderT' modernDBs .
             runDBPureRedirect .
             runBlockDBRedirect $
@@ -157,12 +164,6 @@ runRawRealMode allWorkersNum transport np@NodeParams {..} sscnp listeners outSpe
                 (runDBPureRedirect $ mkSlottingVar npSystemStart)
                 modernDBs
         txpVar <- mkTxpLocalData mempty initTip
-        slottingSettings <-
-            case npUseNTP of
-                False -> return $ SomeSlottingSettings simpleSlottingSettings
-                True  -> do
-                    var <- mkNtpSlottingVar
-                    return $ SomeSlottingSettings $ ntpSlottingSettings var
         dlgVar <- RWV.new def
 
         -- TODO [CSL-775] need an effect-free way of running this into IO.
@@ -170,7 +171,7 @@ runRawRealMode allWorkersNum transport np@NodeParams {..} sscnp listeners outSpe
             runIO (RawRealMode act) =
                runProduction .
                    usingLoggerName lpRunnerTag .
-                   runCH @ssc allWorkersNum np initNC modernDBs .
+                   runCHHere .
                    flip Ether.runReadersT
                       ( Tagged @NodeDBs modernDBs
                       , Tagged @SlottingVar slottingVar
@@ -206,7 +207,7 @@ runRawRealMode allWorkersNum transport np@NodeParams {..} sscnp listeners outSpe
         let stopMonitoring it = whenJust it stopMonitor
 
         sscState <-
-           runCH @ssc allWorkersNum np initNC modernDBs .
+           runCHHere .
            flip Ether.runReadersT
                ( Tagged @NodeDBs modernDBs
                , Tagged @SlottingVar slottingVar
@@ -216,7 +217,7 @@ runRawRealMode allWorkersNum transport np@NodeParams {..} sscnp listeners outSpe
            runSlotsRedirect .
            runDBPureRedirect $
            mkSscState @ssc
-        runCH allWorkersNum np initNC modernDBs .
+        runCHHere .
            flip Ether.runReadersT
                ( Tagged @NodeDBs modernDBs
                , Tagged @SlottingVar slottingVar
@@ -407,9 +408,10 @@ runCH
     -> NodeParams
     -> SscNodeContext ssc
     -> NodeDBs
+    -> SlottingContext
     -> Ether.ReadersT (NodeContext ssc) m a
     -> m a
-runCH allWorkersNum params@NodeParams {..} sscNodeContext db act = do
+runCH allWorkersNum params@NodeParams {..} sscNodeContext db slottingCtx act = do
     ncLoggerConfig <- getRealLoggerConfig $ bpLoggingParams npBaseParams
     ncJLFile <- JLFile <$>
         liftIO (maybe (pure Nothing) (fmap Just . newMVar) npJLFile)
@@ -453,6 +455,7 @@ runCH allWorkersNum params@NodeParams {..} sscNodeContext db act = do
             , ncUpdateContext = UpdateContext {..}
             , ncNodeParams = params
             , ncSendLock = Nothing
+            , ncSlottingContext = slottingContext
 #ifdef WITH_EXPLORER
             , ncTxpGlobalSettings = explorerTxpGlobalSettings
 #else

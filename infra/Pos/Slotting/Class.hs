@@ -1,6 +1,7 @@
-{-# LANGUAGE DataKinds    #-}
-{-# LANGUAGE Rank2Types   #-}
-{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DataKinds       #-}
+{-# LANGUAGE Rank2Types      #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies    #-}
 
 -- | Type class used for slotting functionality.
 
@@ -10,16 +11,23 @@ module Pos.Slotting.Class
        , SomeSlottingSettings (..)
        , MonadSlots (..)
 
+       , SlottingWorkerConstraint
+
        , SlotsRedirect
        , runSlotsRedirect
+
+       , SlottingContext (..)
        ) where
 
 import           Universum
 
+import           Control.Lens                 (makeLensesFor)
 import           Control.Monad.Trans          (MonadTrans)
+import           Control.Monad.Trans.Control  (MonadBaseControl)
 import           Control.Monad.Trans.Identity (IdentityT (..))
 import           Data.Coerce                  (coerce)
 import qualified Ether
+import           Ether.Internal               (HasLens (..))
 import           Mockable                     (Catch, CurrentTime, Delay, Fork, Mockables,
                                                Throw)
 import           System.Wlog                  (WithLogger)
@@ -72,6 +80,25 @@ type SlottingConstraint m =
 data SomeSlottingSettings =
     SomeSlottingSettings (forall m. SlottingConstraint m =>
                                         (SlottingSettings m))
+
+-- | Set of constraints necessary for slotting worker. This one is
+-- bigger than the previous one, because worker may do some extra
+-- stuff. Feel free to add more if you need it, but be careful and
+-- don't add something too restrictive.
+type SlottingWorkerConstraint m =
+    ( MonadIO m
+    , MonadBaseControl IO m
+    , WithLogger m
+    , MonadSlotsData m
+    , MonadMask m
+    , Mockables m
+        [ Fork
+        , Throw
+        , Catch
+        , Delay
+        , CurrentTime
+        ]
+    )
 
 ----------------------------------------------------------------------------
 -- Type class
@@ -135,3 +162,24 @@ instance ( SlottingConstraint m
     currentTimeSlotting = do
         SomeSlottingSettings settings <- Ether.ask'
         ssCurrentTimeSlotting settings
+
+----------------------------------------------------------------------------
+-- Context
+----------------------------------------------------------------------------
+
+-- | Runtime context used by slotting. Basically settings and
+-- workers. They are separated, because they have different
+-- constraints and for some other reasons.
+data SlottingContext = SlottingContext
+    { scSettings :: SomeSlottingSettings
+    , scWorkers  :: forall m. SlottingWorkerConstraint m => [m ()]
+    }
+
+makeLensesFor
+    [ ("scSettings", "scSettingsL")
+    -- , ("scWorkers", "scWorkersL")
+    ]
+    ''SlottingContext
+
+instance HasLens SomeSlottingSettings SlottingContext SomeSlottingSettings where
+    lensOf = scSettingsL

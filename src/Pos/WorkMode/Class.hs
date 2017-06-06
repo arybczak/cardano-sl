@@ -39,7 +39,7 @@ import           Pos.Recovery.Info           (MonadRecoveryInfo)
 import           Pos.Reporting               (MonadReportingMem)
 import           Pos.Security.Params         (SecurityParams)
 import           Pos.Shutdown                (MonadShutdownMem)
-import           Pos.Slotting.Class          (MonadSlots)
+import           Pos.Slotting.Class          (MonadSlots, SlottingContext)
 import           Pos.Ssc.Class.Helpers       (SscHelpersClass (..))
 import           Pos.Ssc.Class.LocalData     (SscLocalDataClass)
 import           Pos.Ssc.Class.Storage       (SscGStateClass)
@@ -84,6 +84,7 @@ type WorkMode ssc m
       , Ether.MonadReader' StartTime m
       , Ether.MonadReader' BlkSemaphore m
       , Ether.MonadReader' LrcContext m
+      , Ether.MonadReader' SlottingContext m
       , Ether.MonadReader' UpdateContext m
       , Ether.MonadReader' NodeParams m
       , Ether.MonadReader' UpdateParams m

@@ -83,7 +83,6 @@ type RawRealMode' ssc =
     Ether.ReadersT
         ( Tagged NodeDBs NodeDBs
         , Tagged SlottingVar SlottingVar
-        , Tagged SomeSlottingSettings SomeSlottingSettings
         , Tagged SscMemTag (SscState ssc)
         , Tagged TxpHolderTag (GenericTxpLocalData TxpExtra_TMP)
         , Tagged DelegationVar DelegationVar
