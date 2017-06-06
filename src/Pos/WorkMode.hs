@@ -41,14 +41,15 @@ import           Pos.Communication.PeerState    (PeerStateCtx, PeerStateRedirect
 import           Pos.Context                    (NodeContext)
 import           Pos.DB                         (DBPureRedirect, MonadGState, NodeDBs)
 import           Pos.DB.Block                   (BlockDBRedirect, MonadBlockDBWrite)
-import           Pos.DB.Class                   (MonadBlockDBGeneric (..), MonadDBRead, MonadDB)
+import           Pos.DB.Class                   (MonadBlockDBGeneric (..), MonadDB,
+                                                 MonadDBRead)
 import           Pos.DB.DB                      (GStateCoreRedirect)
 import           Pos.Delegation.Class           (DelegationVar)
 import           Pos.Discovery.Holders          (DiscoveryConstT, DiscoveryKademliaT)
-import           Pos.Slotting.Class             (MonadSlots)
+import           Pos.Slotting                   (MonadSlots, SlotsRedirect,
+                                                 SomeSlottingSettings)
 import           Pos.Slotting.MemState          (MonadSlotsData, SlottingVar)
 import           Pos.Slotting.MemState.Holder   (SlotsDataRedirect)
-import           Pos.Slotting.Ntp               (NtpSlottingVar, SlotsRedirect)
 import           Pos.Ssc.Class.Helpers          (SscHelpersClass)
 import           Pos.Ssc.Extra                  (SscMemTag, SscState)
 import           Pos.Statistics.MonadStats      (NoStatsT, StatsT)
@@ -82,7 +83,7 @@ type RawRealMode' ssc =
     Ether.ReadersT
         ( Tagged NodeDBs NodeDBs
         , Tagged SlottingVar SlottingVar
-        , Tagged (Bool, NtpSlottingVar) (Bool, NtpSlottingVar)
+        , Tagged SomeSlottingSettings SomeSlottingSettings
         , Tagged SscMemTag (SscState ssc)
         , Tagged TxpHolderTag (GenericTxpLocalData TxpExtra_TMP)
         , Tagged DelegationVar DelegationVar

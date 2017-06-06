@@ -10,17 +10,16 @@ module Pos.Wallet.Web.Server.Full.Common
        , convertHandler
        ) where
 
+import           Universum
+
 import qualified Control.Monad.Catch           as Catch
 import           Control.Monad.Except          (MonadError (throwError))
 import           Data.Tagged                   (Tagged (..))
 import qualified Ether
 import           Mockable                      (runProduction)
-import           Pos.Slotting.Ntp              (runSlotsRedirect)
-import           Pos.Ssc.Extra.Class           (askSscMem)
 import           Servant.Server                (Handler)
 import           Servant.Utils.Enter           ((:~>) (..))
 import           System.Wlog                   (usingLoggerName)
-import           Universum
 
 import           Pos.Block.BListener           (runBListenerStub)
 import           Pos.Client.Txp.Balances       (runBalancesRedirect)
@@ -38,10 +37,11 @@ import           Pos.Delegation.Class          (DelegationVar, askDelegationStat
 import           Pos.DHT.Real                  (KademliaDHTInstance)
 import           Pos.Discovery                 (askDHTInstance, getPeers,
                                                 runDiscoveryConstT, runDiscoveryKademliaT)
-import           Pos.Slotting                  (NtpSlottingVar, SlottingVar,
-                                                askFullNtpSlotting, askSlotting,
-                                                runSlotsDataRedirect)
+import           Pos.Slotting                  (SlottingVar, SomeSlottingSettings,
+                                                askSlotting, runSlotsDataRedirect,
+                                                runSlotsRedirect)
 import           Pos.Ssc.Extra                 (SscMemTag, SscState)
+import           Pos.Ssc.Extra.Class           (askSscMem)
 import           Pos.Txp                       (GenericTxpLocalData, TxpHolderTag,
                                                 askTxpMem)
 import           Pos.Wallet.SscType            (WalletSscType)
@@ -72,10 +72,10 @@ nat = do
     modernDB1   <- getNodeDBs
     conn1       <- getWalletWebSockets
     slotVar1    <- askSlotting
-    ntpSlotVar1 <- askFullNtpSlotting
+    slotStgs1   <- Ether.ask @SomeSlottingSettings
     kinst1      <- askDHTInstance
     pure $ NT (\h -> convertHandler nc1 modernDB1 tlw1 ssc1 ws1 delWrap1
-                              psCtx1 conn1 slotVar1 ntpSlotVar1 (Left (kinst1, h)))
+                              psCtx1 conn1 slotVar1 slotStgs1 (Left (kinst1, h)))
 
 natS :: WebHandlerS (WebHandlerS :~> Handler)
 natS = do
@@ -88,10 +88,10 @@ natS = do
     modernDB   <- getNodeDBs
     conn       <- getWalletWebSockets
     slotVar    <- askSlotting
-    ntpSlotVar <- askFullNtpSlotting
+    slotStgs   <- Ether.ask @SomeSlottingSettings
     peers      <- getPeers
     pure $ NT (\h -> convertHandler nc modernDB tlw ssc ws delWrap
-                              psCtx conn slotVar ntpSlotVar (Right (peers, h)))
+                              psCtx conn slotVar slotStgs (Right (peers, h)))
 
 convertHandler
     :: NodeContext WalletSscType              -- (.. insert monad `m` here ..)
@@ -103,11 +103,11 @@ convertHandler
     -> PeerStateSnapshot
     -> ConnectionsVar
     -> SlottingVar
-    -> (Bool, NtpSlottingVar)
+    -> SomeSlottingSettings
     -> Either (KademliaDHTInstance, WebHandler a) (Set NodeId, WebHandlerS a)
     -> Handler a
 convertHandler nc modernDBs tlw ssc ws delWrap psCtx
-               conn slotVar ntpSlotVar handler =
+               conn slotVar slotSettings handler =
     liftIO (either kRunner sRunner handler) `Catch.catches` excHandlers
   where
     sRunner (peers, wh) = rawRunner . runDiscoveryConstT peers . walletRunner $ wh
@@ -123,7 +123,7 @@ convertHandler nc modernDBs tlw ssc ws delWrap psCtx
                Ether.runReadersT m
                    ( Tagged @NodeDBs modernDBs
                    , Tagged @SlottingVar slotVar
-                   , Tagged @(Bool, NtpSlottingVar) ntpSlotVar
+                   , Tagged @SomeSlottingSettings slotSettings
                    , Tagged @SscMemTag ssc
                    , Tagged @TxpHolderTag tlw
                    , Tagged @DelegationVar delWrap
